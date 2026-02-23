@@ -119,13 +119,11 @@ def get_theme_stylesheet() -> str:
     }
     QTreeView::branch:has-children:!has-siblings:closed,
     QTreeView::branch:closed:has-children:has-siblings {
-        image: none;
-        border-image: none;
+        image: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cG9seWdvbiBwb2ludHM9IjQsMiAxNCw4IDQsMTQiIGZpbGw9IiNmZmZmZmYiLz48L3N2Zz4=");
     }
     QTreeView::branch:open:has-children:!has-siblings,
     QTreeView::branch:open:has-children:has-siblings {
-        image: none;
-        border-image: none;
+        image: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cG9seWdvbiBwb2ludHM9IjIsNCAxNCw0IDgsMTQiIGZpbGw9IiNmZmZmZmYiLz48L3N2Zz4=");
     }
 
     /* ===== Header View ===== */

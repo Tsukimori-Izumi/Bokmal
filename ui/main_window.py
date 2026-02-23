@@ -267,6 +267,7 @@ class MainWindow(QMainWindow):
 
         self.task_table.task_data_changed.connect(self._on_task_data_changed)
         self.task_table.task_moved.connect(self._on_task_moved)
+        self.task_table.collapse_state_changed.connect(self._on_collapse_state_changed)
         self.network_chart.dependency_drawn.connect(self._on_dependency_drawn)
         self.gantt.task_date_changed.connect(self._on_gantt_task_date_changed)
 
@@ -294,7 +295,11 @@ class MainWindow(QMainWindow):
         """Reload all views with current data."""
         self._sync_predecessors_to_tasks()
         self.task_table.load_tasks(self._tasks)
-        self.gantt.load_tasks(self._tasks, self._dependencies)
+        
+        # Only show visible tasks in Gantt
+        visible_tasks = self.task_table.get_visible_tasks()
+        self.gantt.load_tasks(visible_tasks, self._dependencies)
+        
         self.resource_sheet.load_resources(self._resources)
         self.network_chart.load_tasks(self._tasks, self._dependencies)
         self.burndown.load_tasks(self._tasks)
@@ -645,6 +650,11 @@ class MainWindow(QMainWindow):
         self._recalculate_wbs()
         self._refresh_views()
         self.status_bar.showMessage(f"{len(self._clipboard)}件のタスクをペーストしました", 3000)
+
+    def _on_collapse_state_changed(self):
+        """Handle expand/collapse in task table by updating Gantt chart."""
+        visible_tasks = self.task_table.get_visible_tasks()
+        self.gantt.load_tasks(visible_tasks, self._dependencies)
 
     def _on_task_data_changed(self):
         """Handle inline edit in task table."""

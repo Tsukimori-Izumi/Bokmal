@@ -451,6 +451,7 @@ class TaskTableView(QTreeView):
     task_selected = Signal(dict)  # emitted when a task row is selected
     task_data_changed = Signal()  # emitted when task data is edited
     task_moved = Signal(int, int) # emitted when a task is drag-and-dropped
+    collapse_state_changed = Signal() # emitted when a row is expanded or collapsed
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -486,6 +487,10 @@ class TaskTableView(QTreeView):
         self._model.data_changed_signal.connect(self._on_data_changed)
         self._model.task_moved.connect(self.task_moved.emit)
 
+        # Expand/Collapse signals
+        self.expanded.connect(lambda idx: self.collapse_state_changed.emit())
+        self.collapsed.connect(lambda idx: self.collapse_state_changed.emit())
+
         # Selection
         self.selectionModel().currentChanged.connect(self._on_selection_changed)
 
@@ -504,8 +509,50 @@ class TaskTableView(QTreeView):
 
     def load_tasks(self, tasks: list[dict]):
         """Load tasks into the tree model."""
+        # Save expanded state to restore after reload
+        expanded_ids = set()
+        if hasattr(self, "_first_load_done"):
+            def save_state(parent_index):
+                for row in range(self._model.rowCount(parent_index)):
+                    idx = self._model.index(row, 0, parent_index)
+                    if self.isExpanded(idx):
+                        task = self._model.get_task_by_index(idx)
+                        if task and "id" in task:
+                            expanded_ids.add(task["id"])
+                        save_state(idx)
+            save_state(QModelIndex())
+
         self._model.load_tasks(tasks)
-        self.expandAll()
+
+        if not hasattr(self, "_first_load_done"):
+            self.expandAll()
+            self._first_load_done = True
+        else:
+            # Restore expanded state
+            def restore_state(parent_index):
+                for row in range(self._model.rowCount(parent_index)):
+                    idx = self._model.index(row, 0, parent_index)
+                    task = self._model.get_task_by_index(idx)
+                    if task and "id" in task and task["id"] in expanded_ids:
+                        self.expand(idx)
+                    if self._model.rowCount(idx) > 0:
+                        restore_state(idx)
+            restore_state(QModelIndex())
+
+    def get_visible_tasks(self) -> list[dict]:
+        """Get tasks currently visible in the tree (not hidden by collapsed parents)."""
+        visible_tasks = []
+        def traverse(parent_index):
+            for row in range(self._model.rowCount(parent_index)):
+                idx = self._model.index(row, 0, parent_index)
+                task = self._model.get_task_by_index(idx)
+                if task:
+                    visible_tasks.append(task)
+                # Traverse children only if current node is expanded
+                if self.isExpanded(idx) and self._model.rowCount(idx) > 0:
+                    traverse(idx)
+        traverse(QModelIndex())
+        return visible_tasks
 
     def sizeHintForRow(self, row):
         """Force all rows to match GANTT_ROW_HEIGHT."""
