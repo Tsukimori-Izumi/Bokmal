@@ -21,10 +21,10 @@ COLUMNS = [
     {"key": "id", "label": "#", "width": 40, "editable": False},
     {"key": "wbs", "label": "WBS", "width": 60, "editable": False},
     {"key": "duration", "label": "期間", "width": 60, "editable": True},
-    {"key": "start_date", "label": "開始日", "width": 100, "editable": True},
-    {"key": "end_date", "label": "終了日", "width": 100, "editable": True},
-    {"key": "actual_start", "label": "実績開始日", "width": 100, "editable": True},
-    {"key": "actual_end", "label": "実績終了日", "width": 100, "editable": True},
+    {"key": "start_date", "label": "開始日", "width": 120, "editable": True},
+    {"key": "end_date", "label": "終了日", "width": 120, "editable": True},
+    {"key": "actual_start", "label": "実績開始日", "width": 120, "editable": True},
+    {"key": "actual_end", "label": "実績終了日", "width": 120, "editable": True},
     {"key": "progress", "label": "進捗率", "width": 70, "editable": True},
     {"key": "predecessors", "label": "先行タスク", "width": 80, "editable": True},
     {"key": "resource_names", "label": "リソース", "width": 100, "editable": True},
@@ -468,7 +468,7 @@ class TaskTableView(QTreeView):
         )
 
         # Row height must match gantt row height
-        self.setIndentation(16)
+        self.setIndentation(20)
 
         # Enable drag-and-drop row reordering
         self.setDragEnabled(True)

@@ -130,6 +130,17 @@ class MainWindow(QMainWindow):
         network_view.triggered.connect(lambda: self._switch_view("network"))
         view_menu.addAction(network_view)
 
+        view_menu.addSeparator()
+        theme_menu = view_menu.addMenu("テーマ(&M)")
+        
+        dark_action = QAction("🌑 ダークモード", self)
+        dark_action.triggered.connect(lambda: self._apply_theme("dark"))
+        theme_menu.addAction(dark_action)
+        
+        energetic_action = QAction("☀️ 元気が出るモード", self)
+        energetic_action.triggered.connect(lambda: self._apply_theme("energetic"))
+        theme_menu.addAction(energetic_action)
+
         # Task menu
         task_menu = menubar.addMenu("タスク(&T)")
 
@@ -326,6 +337,12 @@ class MainWindow(QMainWindow):
             self.view_stack.setCurrentIndex(0)
             self.right_tabs.setCurrentIndex(1)
         self._current_view = view
+
+    def _apply_theme(self, theme_name: str):
+        from ui.theme import apply_theme
+        from PySide6.QtWidgets import QApplication
+        apply_theme(QApplication.instance(), theme_name)
+        self._refresh_views()
 
     def resizeEvent(self, event):
         """Re-sync scroll on resize/maximize."""

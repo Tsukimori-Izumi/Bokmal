@@ -116,7 +116,10 @@ class TaskNode(QGraphicsRectItem):
         if views:
             if event.button() == Qt.MouseButton.LeftButton:
                 views[0].finish_drag_line(self, event.scenePos())
-        super().mouseReleaseEvent(event)
+        try:
+            super().mouseReleaseEvent(event)
+        except RuntimeError:
+            pass
 
 
 class NetworkChartView(QGraphicsView):

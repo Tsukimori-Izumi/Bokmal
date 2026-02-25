@@ -113,6 +113,7 @@ class ResourceSheetView(QWidget):
 
         self._model = ResourceTableModel(self)
         self.table.setModel(self._model)
+        self._model.dataChanged.connect(self._on_model_data_changed)
 
         header = self.table.horizontalHeader()
         for i, col in enumerate(RESOURCE_COLUMNS):
@@ -123,13 +124,6 @@ class ResourceSheetView(QWidget):
 
     def load_resources(self, resources: list[dict]):
         self._model.load(resources)
-        
-        # Connect model dataChanged to emit our own update signal
-        try:
-            self._model.dataChanged.disconnect(self._on_model_data_changed)
-        except:
-            pass
-        self._model.dataChanged.connect(self._on_model_data_changed)
 
     def _on_model_data_changed(self, top_left, bottom_right, roles):
         self.resource_updated.emit()

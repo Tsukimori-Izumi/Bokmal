@@ -39,8 +39,29 @@ def export_gantt_to_pptx(tasks: list[dict], dependencies: list[dict],
     name_col_width = Inches(3.0)
     chart_left = left_margin + name_col_width + Inches(0.1)
     chart_width = SLIDE_WIDTH - chart_left - Inches(0.3)
-    row_height = Inches(0.28)
     header_height = Inches(0.5)
+
+    # 1ページに収めるためのフォールディング処理
+    available_height = SLIDE_HEIGHT - top_margin - header_height - Inches(0.3)
+    min_row_height = Inches(0.20)
+    max_target_rows = int(available_height / min_row_height)
+
+    display_tasks = tasks
+    if len(display_tasks) > max_target_rows:
+        max_level = max((t.get("wbs_level", 0) for t in display_tasks), default=0)
+        for level_limit in range(max_level - 1, -1, -1):
+            filtered = [t for t in display_tasks if t.get("wbs_level", 0) <= level_limit]
+            if len(filtered) <= max_target_rows:
+                display_tasks = filtered
+                break
+        else:
+            display_tasks = [t for t in display_tasks if t.get("wbs_level", 0) == 0]
+
+    if len(display_tasks) > 0:
+        row_height = min(Inches(0.35), available_height / len(display_tasks))
+    else:
+        row_height = Inches(0.28)
+
     day_width = chart_width / total_days if total_days > 0 else Inches(0.1)
 
     # Colors
@@ -103,7 +124,8 @@ def export_gantt_to_pptx(tasks: list[dict], dependencies: list[dict],
             p.alignment = PP_ALIGN.CENTER
 
     # Task rows
-    for row, task in enumerate(tasks):
+    base_font_size = Pt(8) if row_height >= Inches(0.25) else Pt(6)
+    for row, task in enumerate(display_tasks):
         y = top_margin + header_height + row * row_height
         wbs_level = task.get("wbs_level", 0)
         indent = "    " * wbs_level
@@ -117,7 +139,7 @@ def export_gantt_to_pptx(tasks: list[dict], dependencies: list[dict],
         p = tf.paragraphs[0]
         name_text = indent + task.get("name", "")
         p.text = name_text
-        p.font.size = Pt(7)
+        p.font.size = base_font_size
         if task.get("is_summary"):
             p.font.bold = True
             p.font.color.rgb = summary_color
@@ -178,7 +200,7 @@ def export_gantt_to_pptx(tasks: list[dict], dependencies: list[dict],
         today_x = chart_left + day_width * (today - proj_start).days
         line = slide.shapes.add_shape(
             1, today_x, top_margin, Emu(15000),
-            header_height + len(tasks) * row_height
+            header_height + len(display_tasks) * row_height
         )
         line.fill.solid()
         line.fill.fore_color.rgb = RGBColor(0xFF, 0x44, 0x44)

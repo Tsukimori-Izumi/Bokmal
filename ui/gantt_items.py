@@ -64,7 +64,8 @@ class TaskBarItem(QGraphicsItem):
         return "\n".join(lines)
 
     def boundingRect(self) -> QRectF:
-        return QRectF(-2, 0, self.bar_width + 4, self.row_height)
+        # Extend to the right by 350 to accommodate task name text
+        return QRectF(-2, 0, self.bar_width + 350, self.row_height)
 
     def paint(self, painter: QPainter, option, widget=None):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -161,6 +162,17 @@ class TaskBarItem(QGraphicsItem):
             QPointF(self.bar_width, y + bracket_h),
         ])
         painter.drawPolygon(tri_right)
+
+        # Task name text
+        name = self.task_data.get("name", "")
+        if name:
+            painter.setPen(QColor(COLORS.get("text_primary", "#e0e0e8")))
+            f = QFont("Segoe UI", 9)
+            painter.setFont(f)
+            text_rect = QRectF(self.bar_width + 8, y_offset, 340, self.bar_height)
+            painter.drawText(text_rect,
+                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                             name)
 
     def _paint_milestone(self, painter, y_offset):
         """Paint milestone as a diamond."""
@@ -351,3 +363,42 @@ class TodayLineItem(QGraphicsItem):
             QPointF(self.line_x, 0),
             QPointF(self.line_x, self.line_height)
         )
+
+class InazumaLineItem(QGraphicsItem):
+    """Jagged progress line."""
+    def __init__(self, points: list[QPointF], parent=None):
+        super().__init__(parent)
+        self.points = points
+        self.setZValue(110)
+
+    def boundingRect(self) -> QRectF:
+        if not self.points:
+            return QRectF()
+        min_x = min(p.x() for p in self.points)
+        max_x = max(p.x() for p in self.points)
+        min_y = min(p.y() for p in self.points)
+        max_y = max(p.y() for p in self.points)
+        return QRectF(min_x - 2, min_y - 2, max_x - min_x + 4, max_y - min_y + 4)
+
+    def paint(self, painter: QPainter, option, widget=None):
+        if not self.points:
+            return
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(QColor("#FF1493"), 2) # DeepPink
+        painter.setPen(pen)
+        poly = QPolygonF(self.points)
+        painter.drawPolyline(poly)
+
+
+class CurtainAreaItem(QGraphicsPolygonItem):
+    """Filled area between Inazuma line and Today line."""
+    def __init__(self, points: list[QPointF], parent=None):
+        super().__init__(parent)
+        self.setZValue(90) # Below today line
+        poly = QPolygonF(points)
+        self.setPolygon(poly)
+        self.setPen(Qt.PenStyle.NoPen)
+        # Semi-transparent red for visibility of delay
+        self.setBrush(QBrush(QColor(255, 107, 107, 40)))
+
+

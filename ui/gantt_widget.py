@@ -5,7 +5,7 @@ import math
 
 from PySide6.QtWidgets import (
     QGraphicsView, QGraphicsScene, QWidget, QVBoxLayout,
-    QHBoxLayout, QLabel, QComboBox, QFrame
+    QHBoxLayout, QLabel, QComboBox, QFrame, QCheckBox
 )
 from PySide6.QtCore import Qt, QRectF, QPointF, Signal, QDateTime
 from PySide6.QtGui import (
@@ -13,7 +13,7 @@ from PySide6.QtGui import (
 )
 
 from ui.theme import COLORS
-from ui.gantt_items import TaskBarItem, DependencyArrowItem, TodayLineItem
+from ui.gantt_items import TaskBarItem, DependencyArrowItem, TodayLineItem, InazumaLineItem
 from config import GANTT_ROW_HEIGHT, GANTT_HEADER_HEIGHT, GANTT_DAY_WIDTH
 
 
@@ -21,6 +21,7 @@ class TimeScale:
     DAY = "day"
     WEEK = "week"
     MONTH = "month"
+    AUTO = "auto"
 
     WIDTHS = {
         DAY: 40,
@@ -46,9 +47,14 @@ class GanttScene(QGraphicsScene):
         self.project_start = start - timedelta(days=3)
         self.project_end = end + timedelta(days=10)
 
-    def set_time_scale(self, scale: str):
+    def set_time_scale(self, scale: str, available_width: float = 0):
         self.time_scale = scale
-        self.day_width = TimeScale.WIDTHS.get(scale, GANTT_DAY_WIDTH)
+        if scale == TimeScale.AUTO and available_width > 0:
+            total_days = max(1, (self.project_end - self.project_start).days)
+            # Reserve a small margin
+            self.day_width = max(0.1, (available_width - 16) / total_days)
+        else:
+            self.day_width = TimeScale.WIDTHS.get(scale, GANTT_DAY_WIDTH)
 
     def date_to_x(self, d: date) -> float:
         """Convert a date to X position."""
@@ -91,17 +97,26 @@ class GanttScene(QGraphicsScene):
         header_font_small = QFont("Segoe UI", 7)
         month_font = QFont("Segoe UI", 10, QFont.Weight.Bold)
 
+        effective_scale = self.time_scale
+        if self.time_scale == TimeScale.AUTO:
+            if self.day_width < 10:
+                effective_scale = TimeScale.MONTH
+            elif self.day_width < 25:
+                effective_scale = TimeScale.WEEK
+            else:
+                effective_scale = TimeScale.DAY
+
         for day_idx in range(start_day, end_day):
             d = self.project_start + timedelta(days=day_idx)
             x = day_idx * self.day_width
 
-            # Weekend shading
-            if d.weekday() >= 5:
+            # Weekend shading (skip if columns are too thin)
+            if d.weekday() >= 5 and self.day_width > 4:
                 weekend_rect = QRectF(x, self.header_height, self.day_width, total_height)
                 painter.fillRect(weekend_rect, weekend_brush)
 
             # Vertical grid lines (based on scale)
-            if self.time_scale == TimeScale.DAY:
+            if effective_scale == TimeScale.DAY and self.day_width > 4:
                 painter.setPen(grid_pen)
                 painter.drawLine(QPointF(x, self.header_height), QPointF(x, total_height))
 
@@ -111,7 +126,7 @@ class GanttScene(QGraphicsScene):
                 day_rect = QRectF(x, self.header_height - 20, self.day_width, 18)
                 painter.drawText(day_rect, Qt.AlignmentFlag.AlignCenter, str(d.day))
 
-            elif self.time_scale == TimeScale.WEEK:
+            elif effective_scale == TimeScale.WEEK:
                 if d.weekday() == 0:  # Monday
                     painter.setPen(grid_pen)
                     painter.drawLine(QPointF(x, self.header_height), QPointF(x, total_height))
@@ -121,7 +136,7 @@ class GanttScene(QGraphicsScene):
                     painter.drawText(week_rect, Qt.AlignmentFlag.AlignCenter,
                                      f"{d.month}/{d.day}")
 
-            elif self.time_scale == TimeScale.MONTH:
+            elif effective_scale == TimeScale.MONTH:
                 if d.day == 1:
                     painter.setPen(QPen(QColor(COLORS["border_light"]), 1))
                     painter.drawLine(QPointF(x, self.header_height), QPointF(x, total_height))
@@ -174,9 +189,22 @@ class GanttChartView(QGraphicsView):
         self._dependency_items: list[DependencyArrowItem] = []
         self._cached_tasks: list[dict] = []
         self._cached_deps: list[dict] | None = None
+        self._show_today_line = True
+        self._show_inazuma = False
 
     def set_time_scale(self, scale: str):
-        self._scene.set_time_scale(scale)
+        available_width = self.viewport().width()
+        self._scene.set_time_scale(scale, available_width)
+        self._reload()
+        
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self._scene.time_scale == TimeScale.AUTO:
+            self.set_time_scale(TimeScale.AUTO)
+
+    def set_display_options(self, today: bool, inazuma: bool):
+        self._show_today_line = today
+        self._show_inazuma = inazuma
         self._reload()
 
     def _reload(self):
@@ -191,6 +219,14 @@ class GanttChartView(QGraphicsView):
             self._scene.removeItem(item)
         for item in self._dependency_items:
             self._scene.removeItem(item)
+            
+        if getattr(self, "_today_line", None):
+            self._scene.removeItem(self._today_line)
+            self._today_line = None
+        if getattr(self, "_inazuma_line", None):
+            self._scene.removeItem(self._inazuma_line)
+            self._inazuma_line = None
+            
         self._task_items.clear()
         self._dependency_items.clear()
 
@@ -264,13 +300,37 @@ class GanttChartView(QGraphicsView):
                     self._scene.addItem(arrow)
                     self._dependency_items.append(arrow)
 
-        # Today line
+        # Aux Lines
         today = date.today()
-        if self._scene.project_start <= today <= self._scene.project_end:
-            today_x = self._scene.date_to_x(today)
-            total_height = self._scene.header_height + len(tasks) * self._scene.row_height
-            today_line = TodayLineItem(today_x, total_height)
-            self._scene.addItem(today_line)
+        today_x = self._scene.date_to_x(today)
+        total_height = self._scene.header_height + len(tasks) * self._scene.row_height
+
+        # Today Line
+        if self._show_today_line:
+            if self._scene.project_start <= today <= self._scene.project_end:
+                self._today_line = TodayLineItem(today_x, total_height)
+                self._scene.addItem(self._today_line)
+
+        # Inazuma
+        if self._show_inazuma:
+            points = []
+            points.append(QPointF(today_x, self._scene.header_height))
+            for row, task in enumerate(tasks):
+                y = self._scene.header_height + row * self._scene.row_height + self._scene.row_height / 2
+                start = task.get("start_date")
+                end = task.get("end_date")
+                if isinstance(start, date) and isinstance(end, date):
+                    prog = task.get("progress", 0) / 100.0
+                    prog_days = (end - start).days * prog
+                    prog_date = start + timedelta(days=prog_days)
+                    px = self._scene.date_to_x(prog_date)
+                    points.append(QPointF(px, y))
+                else:
+                    points.append(QPointF(today_x, y))
+            points.append(QPointF(today_x, total_height))
+            
+            self._inazuma_line = InazumaLineItem(points)
+            self._scene.addItem(self._inazuma_line)
 
         # Update scene rect
         total_days = (self._scene.project_end - self._scene.project_start).days
@@ -340,9 +400,20 @@ class GanttWidget(QWidget):
         self.scale_combo.addItem("日", TimeScale.DAY)
         self.scale_combo.addItem("週", TimeScale.WEEK)
         self.scale_combo.addItem("月", TimeScale.MONTH)
+        self.scale_combo.addItem("全体", TimeScale.AUTO)
         self.scale_combo.currentIndexChanged.connect(self._on_scale_changed)
         self.scale_combo.setFixedWidth(70)
         tb_layout.addWidget(self.scale_combo)
+
+        # Toggles
+        self.cb_today = QCheckBox("今日線")
+        self.cb_today.setChecked(True)
+        self.cb_today.toggled.connect(self._on_display_toggled)
+        tb_layout.addWidget(self.cb_today)
+
+        self.cb_inazuma = QCheckBox("イナズマ線")
+        self.cb_inazuma.toggled.connect(self._on_display_toggled)
+        tb_layout.addWidget(self.cb_inazuma)
 
         tb_layout.addStretch()
 
@@ -365,6 +436,12 @@ class GanttWidget(QWidget):
     def _on_scale_changed(self, index):
         scale = self.scale_combo.currentData()
         self.chart.set_time_scale(scale)
+
+    def _on_display_toggled(self):
+        self.chart.set_display_options(
+            self.cb_today.isChecked(),
+            self.cb_inazuma.isChecked()
+        )
 
     def sync_vertical_scroll(self, value):
         """Sync vertical scroll with task table, offset by header height."""
